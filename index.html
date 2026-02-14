@@ -1,56 +1,275 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>线上同步盲盒</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>线上同步盲盒</title>
+  <style>
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Arial,sans-serif;
+      background:radial-gradient(circle at top,#ffb199,#ff0844);
+      display:flex;align-items:center;justify-content:center;
+    }
+    .app{
+      width:94%;max-width:440px;
+      background:#fff;border-radius:26px;
+      box-shadow:0 22px 50px rgba(0,0,0,.28);
+      padding:20px 16px 22px;
+      text-align:center;overflow:hidden;
+    }
+    h1{margin:8px 0 2px;font-size:22px;}
+    .sub{color:#777;font-size:14px;margin-bottom:10px;}
+    .pill{
+      display:inline-block;
+      background:#f4f4f4;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;color:#555;
+      margin:8px 0 12px;
+    }
+    .box{
+      width:180px;height:180px;margin:14px auto 8px;
+      border-radius:26px;
+      background:linear-gradient(135deg,#ffe259,#ffa751);
+      box-shadow:inset 0 0 0 5px rgba(255,255,255,.5),0 16px 26px rgba(0,0,0,.22);
+      display:flex;align-items:center;justify-content:center;
+      font-size:56px;position:relative;overflow:hidden;
+    }
+    .shake{animation:shake .85s;}
+    @keyframes shake{
+      0%{transform:scale(1) rotate(0)}
+      20%{transform:scale(1.05) rotate(4deg)}
+      40%{transform:scale(1.05) rotate(-4deg)}
+      60%{transform:scale(1.05) rotate(3deg)}
+      80%{transform:scale(1.05) rotate(-3deg)}
+      100%{transform:scale(1) rotate(0)}
+    }
+    .rays{
+      position:absolute;inset:-40px;
+      background:conic-gradient(from 0deg,#fff,transparent 18%,#fff 36%,transparent 54%,#fff 72%,transparent 90%);
+      opacity:.7;
+      animation:spin 1.2s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .flash{
+      position:absolute;inset:0;
+      background:radial-gradient(circle,#fff 0%,transparent 70%);
+      animation:flash .6s forwards;
+    }
+    @keyframes flash{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
+
+    .status{
+      min-height:22px;
+      font-size:15px;
+      color:#333;
+      margin:6px 0 2px;
+    }
+    .error{
+      margin-top:10px;
+      background:#fff3f3;
+      border:1px solid #ffd0d0;
+      color:#b00020;
+      padding:10px 12px;
+      border-radius:14px;
+      text-align:left;
+      font-size:13px;
+      white-space:pre-wrap;
+      display:none;
+    }
+    .btns{display:flex;gap:10px;margin-top:12px;}
+    button{
+      flex:1;border:none;border-radius:22px;
+      padding:13px 0;font-size:16px;font-weight:700;
+      cursor:pointer;-webkit-tap-highlight-color:transparent;
+    }
+    .primary{background:linear-gradient(135deg,#ff512f,#dd2476);color:#fff;}
+    .ghost{background:#f2f2f2;color:#555;}
+    button:disabled{opacity:.55;cursor:not-allowed;}
+    .history{
+      margin-top:14px;text-align:left;
+      background:#fafafa;border-radius:16px;
+      padding:10px 12px;
+      max-height:170px;overflow:auto;
+      font-size:14px;
+    }
+    .history b{display:block;margin-bottom:6px;}
+    .item{padding:4px 0;border-bottom:1px dashed #e9e9e9;}
+    .item:last-child{border-bottom:none;}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>🎁 线上盲盒</h1>
+    <div class="sub">三个人同时打开同一个网址，抽一个全员同步少一个</div>
+    <div class="pill" id="count">正在连接数据库…</div>
+
+    <div class="box" id="box">🎁</div>
+    <div class="status" id="status">等待开盒</div>
+
+    <div class="btns">
+      <button class="primary" id="openBtn">拆盲盒</button>
+      <button class="ghost" id="nextBtn" disabled>准备下一个</button>
+    </div>
+
+    <div class="btns" style="margin-top:10px;">
+      <button class="ghost" id="resetBtn">重置本轮（10个盲盒）</button>
+    </div>
+
+    <div class="history" id="history"><b>已抽出</b><div class="item">暂无</div></div>
+    <div class="error" id="err"></div>
+  </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, runTransaction, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, runTransaction, get, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAC5yACX-XhRoumo9X-dU3vnHFYWOI5RNY",
-  authDomain: "blindbox-online.firebaseapp.com",
-  databaseURL: "https://blindbox-online-default-rtdb.firebaseio.com/",
-  projectId: "blindbox-online",
-  storageBucket: "blindbox-online.firebasestorage.app",
-  messagingSenderId: "961940133210",
-  appId: "1:961940133210:web:bb97bc0e1edcf2561bcf63"
-};
+  // ✅ 你的 Firebase 配置（已填好）
+  const firebaseConfig = {
+    apiKey: "AIzaSyAC5yACX-XhRoumo9X-dU3vnHFYWOI5RNY",
+    authDomain: "blindbox-online.firebaseapp.com",
+    projectId: "blindbox-online",
+    storageBucket: "blindbox-online.firebasestorage.app",
+    messagingSenderId: "961940133210",
+    appId: "1:961940133210:web:bb97bc0e1edcf2561bcf63"
+  };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const blindboxRef = ref(db, "blindbox");
+  const box = document.getElementById("box");
+  const count = document.getElementById("count");
+  const status = document.getElementById("status");
+  const history = document.getElementById("history");
+  const errBox = document.getElementById("err");
+  const openBtn = document.getElementById("openBtn");
+  const nextBtn = document.getElementById("nextBtn");
+  const resetBtn = document.getElementById("resetBtn");
 
-// 初始化（只会执行一次）
-get(blindboxRef).then(snapshot => {
-  if (!snapshot.exists()) {
-    runTransaction(blindboxRef, () => {
-      return {
-        remaining: [1,2,3,4,5,6,7,8,9,10],
-        history: []
-      };
-    });
+  let opened = false;
+
+  function showErr(msg){
+    errBox.style.display = "block";
+    errBox.textContent =
+`出现问题（这不是你操作错）：
+${msg}
+
+✅ 你需要确认两件事：
+1）Firebase 控制台已创建 Realtime Database
+2）Realtime Database 的 Rules 设为可读写（临时用）：
+{
+  "rules": { ".read": true, ".write": true }
+}
+`;
   }
-});
 
-// 页面监听
-onValue(blindboxRef, (snapshot) => {
-  const data = snapshot.val();
-  if (!data) return;
+  // 👉 自动推断 databaseURL（如果你没填也能用）
+  async function resolveDatabaseURL() {
+    // 常见默认 RTDB 域名格式：<projectId>-default-rtdb.firebaseio.com
+    return `https://${firebaseConfig.projectId}-default-rtdb.firebaseio.com/`;
+  }
 
-  document.getElementById("count").innerText =
-    "剩余盲盒：" + data.remaining.length + " 个";
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app, await resolveDatabaseURL());
+  const blindboxRef = ref(db, "blindbox");
 
-  const historyDiv = document.getElementById("history");
-  historyDiv.innerHTML = "<b>已抽出：</b><br>";
-  data.history.forEach(item => {
-    historyDiv.innerHTML += "盲盒 " + item + " 号<br>";
-  });
-});
+  async function ensureInit(){
+    const snap = await get(blindboxRef);
+    if (!snap.exists()) {
+      await set(blindboxRef, { remaining:[1,2,3,4,5,6,7,8,9,10], history:[] });
+    }
+  }
 
-// 抽盲盒
-window.draw = function(){
-  runTransaction(blindboxRef, (data) => {
-    if (!data || data
+  function render(data){
+    count.textContent = `剩余盲盒：${data.remaining.length} 个`;
+    const list = data.history.slice().reverse(); // 最新在前
+    let html = "<b>已抽出</b>";
+    if (!list.length) html += `<div class="item">暂无</div>`;
+    else list.forEach(x => html += `<div class="item">盲盒 ${x} 号</div>`);
+    history.innerHTML = html;
+
+    if (data.remaining.length === 0) {
+      openBtn.disabled = true;
+      status.textContent = "🎉 全部盲盒已抽完";
+    }
+  }
+
+  try {
+    await ensureInit();
+
+    onValue(blindboxRef, (snap) => {
+      const data = snap.val();
+      if (!data) return;
+      render(data);
+    }, (e) => {
+      showErr(e?.message || String(e));
+    });
+  } catch (e) {
+    showErr(e?.message || String(e));
+  }
+
+  openBtn.onclick = async () => {
+    if (opened) return;
+    opened = true;
+    openBtn.disabled = true;
+
+    status.textContent = "正在拆盲盒…";
+    box.classList.add("shake");
+    const rays = document.createElement("div");
+    rays.className = "rays";
+    box.appendChild(rays);
+
+    setTimeout(async () => {
+      const flash = document.createElement("div");
+      flash.className = "flash";
+      box.appendChild(flash);
+
+      try{
+        await runTransaction(blindboxRef, (data) => {
+          if (!data) return data;
+          if (!Array.isArray(data.remaining) || !Array.isArray(data.history)) {
+            data = { remaining:[1,2,3,4,5,6,7,8,9,10], history:[] };
+          }
+          if (data.remaining.length === 0) return data;
+
+          const idx = Math.floor(Math.random() * data.remaining.length);
+          const prize = data.remaining.splice(idx,1)[0];
+          data.history.push(prize);
+
+          // 让当前用户也立即看到结果（同步以数据库为准）
+          box.textContent = prize;
+          status.textContent = `你抽到了：盲盒 ${prize} 号`;
+          return data;
+        });
+        nextBtn.disabled = false;
+      } catch(e){
+        showErr(e?.message || String(e));
+        // 出错时允许重新尝试
+        opened = false;
+        openBtn.disabled = false;
+      }
+    }, 850);
+  };
+
+  nextBtn.onclick = () => {
+    // “准备下一个”才清空显示
+    box.textContent = "🎁";
+    status.textContent = "等待开盒";
+    box.classList.remove("shake");
+    opened = false;
+    openBtn.disabled = false;
+    nextBtn.disabled = true;
+  };
+
+  resetBtn.onclick = async () => {
+    // 临时玩非常有用：一键恢复 10 个盲盒，全员同步
+    await set(blindboxRef, { remaining:[1,2,3,4,5,6,7,8,9,10], history:[] });
+    box.textContent = "🎁";
+    status.textContent = "等待开盒";
+    box.classList.remove("shake");
+    opened = false;
+    openBtn.disabled = false;
+    nextBtn.disabled = true;
+    errBox.style.display = "none";
+  };
+</script>
+</body>
+</html>
