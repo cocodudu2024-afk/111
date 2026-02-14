@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>线上同步盲盒</title>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, runTransaction, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAC5yACX-XhRoumo9X-dU3vnHFYWOI5RNY",
+  authDomain: "blindbox-online.firebaseapp.com",
+  databaseURL: "https://blindbox-online-default-rtdb.firebaseio.com/",
+  projectId: "blindbox-online",
+  storageBucket: "blindbox-online.firebasestorage.app",
+  messagingSenderId: "961940133210",
+  appId: "1:961940133210:web:bb97bc0e1edcf2561bcf63"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const blindboxRef = ref(db, "blindbox");
+
+// 初始化（只会执行一次）
+get(blindboxRef).then(snapshot => {
+  if (!snapshot.exists()) {
+    runTransaction(blindboxRef, () => {
+      return {
+        remaining: [1,2,3,4,5,6,7,8,9,10],
+        history: []
+      };
+    });
+  }
+});
+
+// 页面监听
+onValue(blindboxRef, (snapshot) => {
+  const data = snapshot.val();
+  if (!data) return;
+
+  document.getElementById("count").innerText =
+    "剩余盲盒：" + data.remaining.length + " 个";
+
+  const historyDiv = document.getElementById("history");
+  historyDiv.innerHTML = "<b>已抽出：</b><br>";
+  data.history.forEach(item => {
+    historyDiv.innerHTML += "盲盒 " + item + " 号<br>";
+  });
+});
+
+// 抽盲盒
+window.draw = function(){
+  runTransaction(blindboxRef, (data) => {
+    if (!data || data
